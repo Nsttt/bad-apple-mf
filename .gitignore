@@ -10,6 +10,7 @@ node_modules
 # generated assets (keep repo reproducible)
 frames/
 apps/frames/
+apps/frames-cdn/public/frame-*/
 
 # local audio
 *.mp3

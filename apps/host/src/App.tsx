@@ -12,6 +12,7 @@ type RuntimeConfig = {
   frameCount?: number;
   fps?: number;
   baseUrl?: string;
+  remoteTemplate?: string;
   frameWidth?: number;
   frameHeight?: number;
   audioUrl?: string;
@@ -24,7 +25,14 @@ const runtimeConfig =
 
 const frameCount = Number(runtimeConfig.frameCount ?? 120);
 const fps = Number(runtimeConfig.fps ?? 24);
-const baseUrl = runtimeConfig.baseUrl ?? 'http://localhost:4173';
+const framesBaseUrl =
+  runtimeConfig.baseUrl ??
+  process.env.ZE_PUBLIC_FRAMES_BASE_URL ??
+  'http://localhost:4173';
+const remoteTemplate =
+  runtimeConfig.remoteTemplate ??
+  process.env.ZE_PUBLIC_FRAME_REMOTE_TEMPLATE ??
+  '';
 const frameWidth = Number(runtimeConfig.frameWidth ?? 320);
 const frameHeight = Number(runtimeConfig.frameHeight ?? 240);
 const audioUrl = runtimeConfig.audioUrl ?? '';
@@ -32,6 +40,19 @@ const initialAudioOffsetSec = Number(runtimeConfig.audioOffsetSec ?? 0);
 
 const frameDuration = 1000 / fps;
 const padFrame = (value: number) => String(value).padStart(4, '0');
+
+const resolveRemoteUrl = (frameId: string, bust: number) => {
+  const frameDir = `frame-${frameId}`;
+  const template = remoteTemplate.trim();
+  if (template) {
+    const url = template
+      .replaceAll('{frameId}', frameId)
+      .replaceAll('{frameDir}', frameDir);
+    const join = url.includes('?') ? '&' : '?';
+    return `${url}${join}v=${bust}`;
+  }
+  return `${framesBaseUrl.replace(/\/$/, '')}/${frameDir}/mf-manifest.json?v=${bust}`;
+};
 
 const App = () => {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -111,7 +132,7 @@ const App = () => {
 
     const frameId = padFrame(index + 1);
     const scope = `frame_${frameId}`;
-    const remoteUrl = `${baseUrl}/frame-${frameId}/mf-manifest.json?v=${manifestBustRef.current}`;
+    const remoteUrl = resolveRemoteUrl(frameId, manifestBustRef.current);
 
     try {
       ensureRemote({ name: scope, entry: remoteUrl });

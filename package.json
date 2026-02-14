@@ -10,6 +10,7 @@
     "frames:build": "pnpm -r --filter \"./apps/frames/*\" build",
     "frames:build:all": "node scripts/build-frames.mjs --start=1 --concurrency=8",
     "frames:build:all:rs": "cargo run --manifest-path tools/framectl/Cargo.toml --release -- build --start=1 --concurrency=8 --silent=1",
+    "frames:pack:cdn": "node scripts/pack-frames-cdn.mjs",
     "frames:serve": "node scripts/serve-frames.mjs",
     "host:dev": "pnpm --filter host dev",
     "host:build": "pnpm --filter host build",

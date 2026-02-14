@@ -24,15 +24,16 @@ const basePort = Number(args.get('port') || 4100);
 const outDir = path.resolve(args.get('out') || 'apps/frames');
 const version = '^1.7.2';
 const mfPluginVersion = '^0.22.1';
+const zephyrPluginVersion = '^0.1.10';
 
 const framesDir = args.get('frames-dir')
   ? path.resolve(String(args.get('frames-dir')))
   : null;
 const usePngFrames = Boolean(framesDir);
-const assetBase = String(args.get('asset-base') || 'http://localhost:4173').replace(
-  /\/$/,
-  '',
-);
+const assetBaseArg = args.get('asset-base');
+const assetBase = assetBaseArg
+  ? String(assetBaseArg).replace(/\/$/, '')
+  : null;
 
 const pad = (value) => String(value).padStart(4, '0');
 
@@ -158,11 +159,12 @@ function buildFrameJs(id, innerHtml, css) {
 
 function buildRsbuildConfig(id, port) {
   const scope = `frame_${id}`;
-  const assetPrefix = `${assetBase}/frame-${id}/`;
+  const assetPrefix = assetBase ? `${assetBase}/frame-${id}/` : './';
   return (
     `import { pluginModuleFederation } from '@module-federation/rsbuild-plugin';\n` +
     `import { defineConfig } from '@rsbuild/core';\n\n` +
-    `export default defineConfig({\n` +
+    `import { withZephyr } from 'zephyr-rsbuild-plugin';\n\n` +
+    `export default defineConfig(withZephyr({\n` +
     `  output: {\n` +
     `    assetPrefix: '${assetPrefix}',\n` +
     `  },\n` +
@@ -190,7 +192,7 @@ function buildRsbuildConfig(id, port) {
     `      },\n` +
     `    },\n` +
     `  },\n` +
-    `});\n`
+    `}));\n`
   );
 }
 
@@ -209,6 +211,7 @@ function buildPackageJson(id) {
       devDependencies: {
         '@module-federation/rsbuild-plugin': mfPluginVersion,
         '@rsbuild/core': version,
+        'zephyr-rsbuild-plugin': zephyrPluginVersion,
       },
     },
     null,

@@ -9,3 +9,11 @@ declare module '*.svg?react' {
   const ReactComponent: React.FunctionComponent<React.SVGProps<SVGSVGElement>>;
   export default ReactComponent;
 }
+
+// Zephyr public env vars are referenced via process.env in browser bundles.
+declare const process: {
+  env: {
+    ZE_PUBLIC_FRAMES_BASE_URL?: string;
+    ZE_PUBLIC_FRAME_REMOTE_TEMPLATE?: string;
+  };
+};
