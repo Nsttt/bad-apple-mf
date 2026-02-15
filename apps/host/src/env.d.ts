@@ -10,10 +10,11 @@ declare module '*.svg?react' {
   export default ReactComponent;
 }
 
-// Zephyr public env vars are referenced via process.env in browser bundles.
-declare const process: {
-  env: {
-    ZE_PUBLIC_FRAMES_BASE_URL?: string;
-    ZE_PUBLIC_FRAME_REMOTE_TEMPLATE?: string;
-  };
-};
+interface ImportMetaEnv {
+  ZE_PUBLIC_FRAMES_BASE_URL?: string;
+  ZE_PUBLIC_FRAME_REMOTE_TEMPLATE?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}

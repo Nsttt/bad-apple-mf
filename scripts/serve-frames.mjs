@@ -35,9 +35,32 @@ const server = http.createServer(async (req, res) => {
     }
 
     const filePath = path.join(root, frameName, 'dist', rest);
-    const data = await fs.readFile(filePath);
     const ext = path.extname(filePath);
 
+    // MF runtime treats mf-manifest.json's `publicPath` as the base for loading
+    // remoteEntry + async chunks. If frames are built with relative publicPath
+    // (eg "./"), the runtime will try to load from the host origin. Rewrite
+    // to the current frame server origin to make local dev "just work".
+    if (rest === 'mf-manifest.json') {
+      const raw = await fs.readFile(filePath, 'utf8');
+      const json = JSON.parse(raw);
+      const host = req.headers.host || `localhost:${port}`;
+      const origin = `http://${host}`.replace(/\/$/, '');
+      json.metaData = json.metaData || {};
+      json.metaData.publicPath = `${origin}/${frameName}/`;
+
+      const data = Buffer.from(JSON.stringify(json, null, 2));
+      res.writeHead(200, {
+        'content-type': 'application/json',
+        'access-control-allow-origin': '*',
+        'cache-control': 'no-store',
+      });
+      res.end(data);
+      if (logRequests) console.log(`${req.method} ${url.pathname} 200`);
+      return;
+    }
+
+    const data = await fs.readFile(filePath);
     res.writeHead(200, {
       'content-type': mime[ext] || 'application/octet-stream',
       'access-control-allow-origin': '*',

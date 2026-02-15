@@ -1,5 +1,4 @@
 import { defineConfig } from '@rsbuild/core';
-import { withZephyr } from 'zephyr-rsbuild-plugin';
 
 export default defineConfig(
   {
@@ -15,6 +14,6 @@ export default defineConfig(
         index: './src/index.ts',
       },
     },
-    plugins: [withZephyr()],
+    plugins: [],
   },
 );

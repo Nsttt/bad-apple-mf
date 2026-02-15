@@ -23,16 +23,31 @@ const runtimeConfig =
   (globalThis as typeof globalThis & { __BAD_APPLE__?: RuntimeConfig })
     .__BAD_APPLE__ ?? {};
 
+const getEnvString = (key: string) => {
+  // Rsbuild exposes env via import.meta.env (rspack define), but in some
+  // deployments `process.env` may also be injected. Avoid hard dependency on
+  // `process` to keep browser bundles clean.
+  const metaEnv = (import.meta as unknown as { env?: Record<string, unknown> })
+    .env;
+  const metaVal = metaEnv?.[key];
+  if (typeof metaVal === 'string' && metaVal.length) return metaVal;
+
+  const procEnv = (globalThis as unknown as { process?: { env?: any } }).process
+    ?.env;
+  const procVal = procEnv?.[key];
+  if (typeof procVal === 'string' && procVal.length) return procVal;
+
+  return '';
+};
+
 const frameCount = Number(runtimeConfig.frameCount ?? 120);
 const fps = Number(runtimeConfig.fps ?? 24);
 const framesBaseUrl =
   runtimeConfig.baseUrl ??
-  process.env.ZE_PUBLIC_FRAMES_BASE_URL ??
-  'http://localhost:4173';
+  (getEnvString('ZE_PUBLIC_FRAMES_BASE_URL') || 'http://localhost:4173');
 const remoteTemplate =
   runtimeConfig.remoteTemplate ??
-  process.env.ZE_PUBLIC_FRAME_REMOTE_TEMPLATE ??
-  '';
+  (getEnvString('ZE_PUBLIC_FRAME_REMOTE_TEMPLATE') || '');
 const frameWidth = Number(runtimeConfig.frameWidth ?? 320);
 const frameHeight = Number(runtimeConfig.frameHeight ?? 240);
 const audioUrl = runtimeConfig.audioUrl ?? '';

@@ -25,6 +25,7 @@ const outDir = path.resolve(args.get('out') || 'apps/frames');
 const version = '^1.7.2';
 const mfPluginVersion = '^0.22.1';
 const zephyrPluginVersion = '^0.1.10';
+const enableZephyr = String(args.get('zephyr') || '0') === '1';
 
 const framesDir = args.get('frames-dir')
   ? path.resolve(String(args.get('frames-dir')))
@@ -160,10 +161,14 @@ function buildFrameJs(id, innerHtml, css) {
 function buildRsbuildConfig(id, port) {
   const scope = `frame_${id}`;
   const assetPrefix = assetBase ? `${assetBase}/frame-${id}/` : './';
+  const zephyrImports = enableZephyr
+    ? `import { withZephyr } from 'zephyr-rsbuild-plugin';\n\n`
+    : '';
+  const zephyrPlugin = enableZephyr ? `    withZephyr(),\n` : '';
   return (
     `import { pluginModuleFederation } from '@module-federation/rsbuild-plugin';\n` +
     `import { defineConfig } from '@rsbuild/core';\n\n` +
-    `import { withZephyr } from 'zephyr-rsbuild-plugin';\n\n` +
+    zephyrImports +
     `export default defineConfig({\n` +
     `  output: {\n` +
     `    assetPrefix: '${assetPrefix}',\n` +
@@ -184,7 +189,7 @@ function buildRsbuildConfig(id, port) {
     `      },\n` +
     `      shared: {},\n` +
     `    }),\n` +
-    `    withZephyr(),\n` +
+    zephyrPlugin +
     `  ],\n` +
     `  tools: {\n` +
     `    rspack: {\n` +
@@ -198,6 +203,12 @@ function buildRsbuildConfig(id, port) {
 }
 
 function buildPackageJson(id) {
+  const devDeps = {
+    '@module-federation/rsbuild-plugin': mfPluginVersion,
+    '@rsbuild/core': version,
+  };
+  if (enableZephyr) devDeps['zephyr-rsbuild-plugin'] = zephyrPluginVersion;
+
   return JSON.stringify(
     {
       name: `@bad-apple/frame-${id}`,
@@ -209,11 +220,7 @@ function buildPackageJson(id) {
         build: 'rsbuild build',
         preview: 'rsbuild preview',
       },
-      devDependencies: {
-        '@module-federation/rsbuild-plugin': mfPluginVersion,
-        '@rsbuild/core': version,
-        'zephyr-rsbuild-plugin': zephyrPluginVersion,
-      },
+      devDependencies: devDeps,
     },
     null,
     2,
