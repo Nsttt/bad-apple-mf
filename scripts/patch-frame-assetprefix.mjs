@@ -8,6 +8,7 @@ const getArg = (name) => {
 };
 
 const assetBase = getArg('--asset-base') || 'http://localhost:4173';
+const force = process.argv.includes('--force') || process.argv.includes('--force=1');
 const root = path.resolve('apps/frames');
 
 const insertAfter = 'export default defineConfig({\n';
@@ -16,7 +17,7 @@ const patchOne = async (dirName) => {
   const filePath = path.join(root, dirName, 'rsbuild.config.mjs');
   let src = await fs.readFile(filePath, 'utf8');
 
-  if (src.includes('assetPrefix:')) return { status: 'skipped', filePath };
+  if (src.includes('assetPrefix:') && !force) return { status: 'skipped', filePath };
   if (!src.includes(insertAfter)) {
     throw new Error(`Unexpected rsbuild config shape: ${filePath}`);
   }
@@ -26,7 +27,15 @@ const patchOne = async (dirName) => {
     `    assetPrefix: '${assetBase}/${dirName}/',\n` +
     `  },\n`;
 
-  src = src.replace(insertAfter, `${insertAfter}${block}`);
+  if (src.includes('assetPrefix:') && force) {
+    // Replace existing assetPrefix value in-place.
+    src = src.replace(
+      /assetPrefix:\s*['"][^'"]+['"]/,
+      `assetPrefix: '${assetBase}/${dirName}/'`,
+    );
+  } else {
+    src = src.replace(insertAfter, `${insertAfter}${block}`);
+  }
   await fs.writeFile(filePath, src, 'utf8');
   return { status: 'patched', filePath };
 };
@@ -56,4 +65,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-

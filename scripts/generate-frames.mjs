@@ -19,11 +19,10 @@ const rowsArg = args.get('rows');
 const threshold = Number(args.get('threshold') || 140);
 const invert = Boolean(args.get('invert'));
 const layers = Number(args.get('layers') || 6);
-const shadowMax = Number(args.get('shadow-max') || 900);
 const basePort = Number(args.get('port') || 4100);
 const outDir = path.resolve(args.get('out') || 'apps/frames');
-const version = '^1.7.2';
-const mfPluginVersion = '^0.22.1';
+const version = '2.0.0-beta.2';
+const mfPluginVersion = '^2.0.1';
 const zephyrPluginVersion = '^0.1.10';
 const enableZephyr = String(args.get('zephyr') || '0') === '1';
 
@@ -46,8 +45,6 @@ const exists = async (target) => {
     return false;
   }
 };
-
-const round = (value) => Number(value.toFixed(2));
 
 function mulberry32(seed) {
   let t = seed + 0x6d2b79f5;
@@ -81,43 +78,71 @@ function buildCss(id) {
   );
 }
 
-function buildPixelCss(id, points, cols, rows) {
-  const stepX = width / cols;
-  const stepY = height / rows;
-  const dotW = round(stepX);
-  const dotH = round(stepY);
-
-  const chunkCount = Math.max(1, Math.ceil(points.length / shadowMax));
-  const chunks = [];
-  for (let i = 0; i < chunkCount; i += 1) {
-    chunks.push(points.slice(i * shadowMax, (i + 1) * shadowMax));
-  }
-
+function buildCanvasFrameJs(id, bitmapBase64, cols, rows) {
   return (
-    `.frame-root.frame-${id} {\n` +
-    `  background: #f4f4f4;\n` +
+    `const width = ${cols};\n` +
+    `const height = ${rows};\n` +
+    `const bitmapBase64 = '${bitmapBase64}';\n` +
+    `const dark = 17;\n` +
+    `const light = 244;\n` +
+    `let bitmapBytes;\n` +
+    `let canvas;\n` +
+    `let rendered = false;\n` +
+    `export const id = '${id}';\n` +
+    `const decodeBitmap = () => {\n` +
+    `  if (bitmapBytes) return bitmapBytes;\n` +
+    `  const binary = atob(bitmapBase64);\n` +
+    `  const bytes = new Uint8Array(binary.length);\n` +
+    `  for (let i = 0; i < binary.length; i += 1) {\n` +
+    `    bytes[i] = binary.charCodeAt(i) & 255;\n` +
+    `  }\n` +
+    `  bitmapBytes = bytes;\n` +
+    `  return bytes;\n` +
+    `};\n` +
+    `const ensureCanvas = () => {\n` +
+    `  if (!canvas) {\n` +
+    `    canvas = document.createElement('canvas');\n` +
+    `    canvas.width = width;\n` +
+    `    canvas.height = height;\n` +
+    `    canvas.style.width = '100%';\n` +
+    `    canvas.style.height = '100%';\n` +
+    `    canvas.style.display = 'block';\n` +
+    `    canvas.style.imageRendering = 'pixelated';\n` +
+    `  }\n` +
+    `  if (rendered) return canvas;\n` +
+    `  const ctx = canvas.getContext('2d', { alpha: false });\n` +
+    `  if (!ctx) throw new Error('2D context unavailable');\n` +
+    `  const image = ctx.createImageData(width, height);\n` +
+    `  const out = image.data;\n` +
+    `  const bits = decodeBitmap();\n` +
+    `  const total = width * height;\n` +
+    `  for (let i = 0; i < total; i += 1) {\n` +
+    `    const on = (bits[i >> 3] & (1 << (i & 7))) !== 0;\n` +
+    `    const v = on ? dark : light;\n` +
+    `    const p = i * 4;\n` +
+    `    out[p] = v;\n` +
+    `    out[p + 1] = v;\n` +
+    `    out[p + 2] = v;\n` +
+    `    out[p + 3] = 255;\n` +
+    `  }\n` +
+    `  ctx.putImageData(image, 0, 0);\n` +
+    `  rendered = true;\n` +
+    `  return canvas;\n` +
+    `};\n` +
+    `export function mount(target) {\n` +
+    `  const root = document.createElement('div');\n` +
+    `  root.className = 'frame-root frame-${id}';\n` +
+    `  root.style.position = 'relative';\n` +
+    `  root.style.width = 'var(--frame-width, ${width}px)';\n` +
+    `  root.style.height = 'var(--frame-height, ${height}px)';\n` +
+    `  root.style.overflow = 'hidden';\n` +
+    `  root.style.background = '#f4f4f4';\n` +
+    `  root.appendChild(ensureCanvas());\n` +
+    `  target.replaceChildren(root);\n` +
     `}\n` +
-    `.frame-root.frame-${id} .pixel {\n` +
-    `  position: absolute;\n` +
-    `  top: 0;\n` +
-    `  left: 0;\n` +
-    `  width: ${dotW}px;\n` +
-    `  height: ${dotH}px;\n` +
-    // NOTE: keep the origin element invisible; points are rendered via box-shadow.
-    `  background: transparent;\n` +
-    `}\n` +
-    chunks
-      .map((chunk, idx) => {
-        const shadows = chunk
-          .map(([x, y]) => `${round(x * stepX)}px ${round(y * stepY)}px 0 0 #111`)
-          .join(', ');
-        return (
-          `.frame-root.frame-${id} .pixel.pixel-${idx} {\n` +
-          `  box-shadow: ${shadows || 'none'};\n` +
-          `}\n`
-        );
-      })
-      .join('')
+    `export function unmount(target) {\n` +
+    `  target.replaceChildren();\n` +
+    `}\n`
   );
 }
 
@@ -185,6 +210,8 @@ function buildRsbuildConfig(id, port) {
     `  plugins: [\n` +
     `    pluginModuleFederation({\n` +
     `      name: '${scope}',\n` +
+    `      // Stable entry filename so the host can skip mf-manifest.json.\n` +
+    `      filename: 'static/js/remoteEntry.js',\n` +
     `      exposes: {\n` +
     `        './Frame': './src/frame.js',\n` +
     `      },\n` +
@@ -237,8 +264,9 @@ async function readPng(filePath) {
   return PNG.sync.read(buffer);
 }
 
-function sampleFrame(png, cols, rows) {
-  const points = [];
+function sampleFrameBitmap(png, cols, rows) {
+  const totalPixels = cols * rows;
+  const bits = new Uint8Array(Math.ceil(totalPixels / 8));
   const cellW = png.width / cols;
   const cellH = png.height / rows;
   const data = png.data;
@@ -263,11 +291,14 @@ function sampleFrame(png, cols, rows) {
       }
       const avg = total / Math.max(1, count);
       const isDark = invert ? avg > threshold : avg < threshold;
-      if (isDark) points.push([col, row]);
+      if (isDark) {
+        const bit = row * cols + col;
+        bits[bit >> 3] |= 1 << (bit & 7);
+      }
     }
   }
 
-  return points;
+  return Buffer.from(bits).toString('base64');
 }
 
 async function resolveFramePath(index, frameMap) {
@@ -321,21 +352,19 @@ for (let i = startIndex; i <= endIndex; i += 1) {
 
   await fs.mkdir(srcDir, { recursive: true });
 
-  let innerHtml = '';
+  let frameJs = '';
   let css = buildCss(id);
 
   if (usePngFrames) {
     const framePath = await resolveFramePath(i, frameMap);
     const png = await readPng(framePath);
-    const points = sampleFrame(png, cols, rows);
-    const chunkCount = Math.max(1, Math.ceil(points.length / shadowMax));
-    innerHtml = Array.from({ length: chunkCount }, (_, idx) => {
-      return `<div class="pixel pixel-${idx}"></div>`;
-    }).join('');
-    css = buildPixelCss(id, points, cols, rows);
+    const bitmapBase64 = sampleFrameBitmap(png, cols, rows);
+    frameJs = buildCanvasFrameJs(id, bitmapBase64, cols, rows);
+    css = `.frame-root.frame-${id} {\n  background: #f4f4f4;\n}\n`;
+  } else {
+    frameJs = buildFrameJs(id, '', css);
   }
 
-  const frameJs = buildFrameJs(id, innerHtml, css);
   const rsbuildConfig = buildRsbuildConfig(id, basePort + i);
   const pkgJson = buildPackageJson(id);
 

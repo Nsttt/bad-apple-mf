@@ -13,6 +13,8 @@ type RuntimeConfig = {
   fps?: number;
   baseUrl?: string;
   remoteTemplate?: string;
+  // default: remoteEntry. set to "manifest" to use mf-manifest.json indirection.
+  remoteMode?: 'manifest' | 'remoteEntry';
   frameWidth?: number;
   frameHeight?: number;
   audioUrl?: string;
@@ -48,13 +50,22 @@ const framesBaseUrl =
 const remoteTemplate =
   runtimeConfig.remoteTemplate ??
   (getEnvString('ZE_PUBLIC_FRAME_REMOTE_TEMPLATE') || '');
+const remoteMode = runtimeConfig.remoteMode ?? 'remoteEntry';
 const frameWidth = Number(runtimeConfig.frameWidth ?? 320);
 const frameHeight = Number(runtimeConfig.frameHeight ?? 240);
 const audioUrl = runtimeConfig.audioUrl ?? '';
 const initialAudioOffsetSec = Number(runtimeConfig.audioOffsetSec ?? 0);
+const isDev = Boolean(
+  (import.meta as unknown as { env?: Record<string, unknown> }).env?.DEV,
+);
 
 const frameDuration = 1000 / fps;
 const padFrame = (value: number) => String(value).padStart(4, '0');
+const withCacheBust = (url: string, bust: number) => {
+  if (!bust) return url;
+  const join = url.includes('?') ? '&' : '?';
+  return `${url}${join}v=${bust}`;
+};
 
 const resolveRemoteUrl = (frameId: string, bust: number) => {
   const frameDir = `frame-${frameId}`;
@@ -63,10 +74,17 @@ const resolveRemoteUrl = (frameId: string, bust: number) => {
     const url = template
       .replaceAll('{frameId}', frameId)
       .replaceAll('{frameDir}', frameDir);
-    const join = url.includes('?') ? '&' : '?';
-    return `${url}${join}v=${bust}`;
+    return withCacheBust(url, bust);
   }
-  return `${framesBaseUrl.replace(/\/$/, '')}/${frameDir}/mf-manifest.json?v=${bust}`;
+
+  const base = framesBaseUrl.replace(/\/$/, '');
+  if (remoteMode === 'remoteEntry') {
+    // Requires each frame remote to emit a stable remoteEntry filename.
+    // See generator: `pluginModuleFederation({ filename: 'static/js/remoteEntry.js' })`
+    return withCacheBust(`${base}/${frameDir}/static/js/remoteEntry.js`, bust);
+  }
+
+  return withCacheBust(`${base}/${frameDir}/mf-manifest.json`, bust);
 };
 
 const App = () => {
@@ -83,7 +101,7 @@ const App = () => {
   const loadingRef = useRef(false);
   const currentModuleRef = useRef<FrameModule | null>(null);
   const hasMountedRef = useRef(false);
-  const manifestBustRef = useRef(Date.now());
+  const manifestBustRef = useRef(isDev ? Date.now() : 0);
 
   const [frameIndex, setFrameIndex] = useState(0);
   const [playing, setPlaying] = useState(false);

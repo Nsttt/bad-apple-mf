@@ -93,4 +93,41 @@ Files:
 - `scripts/serve-frames.mjs` serves `apps/frames/*/dist` with CORS for the host runtime.
 - It also rewrites each `mf-manifest.json` `publicPath` so MF loads the frame assets from `http://localhost:4173/frame-XXXX/` (avoids `RUNTIME-008`).
 - Frame remotes use `mf-manifest.json` via `@module-federation/rsbuild-plugin`.
-- Placeholder CSS uses gradients; PNG mode uses box-shadow pixels.
+- Placeholder mode uses gradients; PNG mode now renders compact bitmap data via `<canvas>`.
+- Frame server now applies cache headers by asset type and serves Brotli/gzip when supported.
+
+## Optimization: Remote Entry First (Default)
+
+The host defaults to `remoteEntry` mode (skips one `mf-manifest.json` fetch per frame).
+
+If you need manifest-based features (prefetch metadata, manifest indirection), switch back to `manifest` mode:
+
+1. Patch frame configs (generated, gitignored) to emit a stable remote entry filename:
+
+```sh
+pnpm frames:patch:remoteentry
+```
+
+2. Ensure each frame builds with an absolute `assetPrefix` (needed so `remoteEntry.js` can fetch its async chunks from the frame server, not the host origin):
+
+```sh
+pnpm frames:patch:assetprefix:force
+```
+
+3. Rebuild frames, then set host config:
+`apps/host/public/index.html`:
+
+```js
+window.__BAD_APPLE__ = {
+  // ...
+  remoteMode: 'manifest',
+};
+```
+
+## CDN / Edge
+
+- Put frame assets behind a CDN and preserve origin response headers.
+- Recommended behavior in `scripts/serve-frames.mjs`:
+  - Hashed assets (`*.hash.js/css`): `public, max-age=31536000, immutable`
+  - `static/js/remoteEntry.js` and `mf-manifest.json`: `public, max-age=60, must-revalidate`
+- Compression: Brotli preferred, gzip fallback (`Accept-Encoding` aware).

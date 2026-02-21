@@ -7,6 +7,11 @@ export default defineConfig({
   server: {
     port: 3000,
   },
+  performance: {
+    chunkSplit: {
+      strategy: 'split-by-experience',
+    },
+  },
   html: {
     template: './public/index.html',
   },
